@@ -252,8 +252,7 @@ function ChatPage({user,onLog}) {
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:SYS,messages:history}),
       });
       const d=await res.json();
-      const reply=d.content?.[0]?.text||"죄송합니다, 잠시 후 다시 시도해 주세요.";
-      setMsgs(prev=>[...prev,{role:"nova",text:reply,ts:Date.now()}]);
+const reply = d.content?.[0]?.text || `[오류] ${d.error?.message || JSON.stringify(d)}`;      setMsgs(prev=>[...prev,{role:"nova",text:reply,ts:Date.now()}]);
     } catch {
       setMsgs(prev=>[...prev,{role:"nova",text:"네트워크 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",ts:Date.now()}]);
     }
