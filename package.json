@@ -1,0 +1,7 @@
+{
+  "name": "nova-deepnoid-chatbot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "NOVA - 딥노이드 임직원 전용 AI 도우미",
+  "engines": { "node": ">=18" }
+}
