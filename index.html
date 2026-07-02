@@ -247,7 +247,7 @@ function ChatPage({user,onLog}) {
     try {
       const history=msgs.slice(1).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text}));
       history.push({role:"user",content:text});
-      const res=await fetch("/api/chat",{
+      const res = await fetch("https://nova-psi-puce.vercel.app/api/chat", {
         method:"POST",headers:{"Content-Type":"application/json"},
         body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:SYS,messages:history}),
       });
