@@ -1,3 +1,5 @@
+const https = require("https");
+
 module.exports = async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -6,21 +8,32 @@ module.exports = async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) return res.status(500).json({ error: "API 키가 설정되지 않았습니다." });
+  if (!apiKey) return res.status(500).json({ error: "API 키 미설정" });
 
-  try {
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const body = JSON.stringify(req.body);
+
+  return new Promise((resolve) => {
+    const request = https.request({
+      hostname: "api.anthropic.com",
+      path: "/v1/messages",
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         "x-api-key": apiKey,
         "anthropic-version": "2023-06-01",
+        "Content-Length": Buffer.byteLength(body),
       },
-      body: JSON.stringify(req.body),
+    }, (response) => {
+      let data = "";
+      response.on("data", (chunk) => { data += chunk; });
+      response.on("end", () => {
+        try { res.status(response.statusCode).json(JSON.parse(data)); }
+        catch (e) { res.status(500).json({ error: "Anthropic 응답 오류" }); }
+        resolve();
+      });
     });
-    const data = await response.json();
-    res.status(response.status).json(data);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+    request.on("error", (err) => { res.status(500).json({ error: err.message }); resolve(); });
+    request.write(body);
+    request.end();
+  });
 };
