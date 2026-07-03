@@ -3,41 +3,35 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>NOVA · 딥노이드 AI 도우미</title>
+<title>DAON · 딥노이드 AI 도우미</title>
 <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f0f5ff}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;background:#f0f5ff}
 input,button,textarea{font-family:inherit}
 ::-webkit-scrollbar{width:5px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#bfdbfe;border-radius:10px}
-@keyframes novaPulse{0%,100%{opacity:.6;transform:scale(1)}50%{opacity:.25;transform:scale(1.14)}}
-@keyframes novaDot{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.2);opacity:1}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-4px)}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
+@keyframes dot{0%,80%,100%{transform:scale(.7);opacity:.4}40%{transform:scale(1.2);opacity:1}}
+@keyframes wink{0%,85%,100%{transform:scaleY(1)}90%{transform:scaleY(0.1)}}
 </style>
 </head>
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useCallback } = React;
 
-/* ── 계정 ── */
-const ACCOUNTS = {
-  "sh.lee": { pw:"deepnoid1234", name:"이성훈",  dept:"P&C팀",        title:"과장",  role:"admin" },
-  "yrkim":  { pw:"deepnoid1234", name:"김유리",  dept:"P&C팀",        title:"대리",  role:"user"  },
-  "khbaek": { pw:"deepnoid1234", name:"백경현",  dept:"P&C팀",        title:"차장",  role:"user"  },
-  "hyjung": { pw:"deepnoid1234", name:"정희영",  dept:"P&C팀",        title:"과장",  role:"user"  },
-  "majin":  { pw:"deepnoid1234", name:"진민아",  dept:"홍보마케팅실",  title:"과장",  role:"user"  },
-  "jhyun":  { pw:"deepnoid1234", name:"현지훈",  dept:"연구개발본부",  title:"본부장",role:"user"  },
-  "gwcho":  { pw:"deepnoid1234", name:"조기원",  dept:"AI빅데이터팀", title:"대리",  role:"user"  },
-  "cyhwang":{ pw:"deepnoid1234", name:"황창영",  dept:"의료AI팀",     title:"연구원",role:"user"  },
-};
+/* ── 이름 ── */
+const BOT_NAME = "DAON";
+const ADMIN_PW = "deepnoid2024!";
 
 /* ── 카테고리 ── */
 const CATS = {
   "법인차량":     ["차량","운행일지","법인차","차키","주행","렌트","셀토스","스포티지"],
-  "직인·계약":    ["직인","날인","계약서","서명","인감","기업부설연구소","공문"],
+  "직인·계약":    ["직인","날인","계약서","서명","인감","공문"],
   "비품·구매":    ["비품","구매","소모품","사무용품","책상","키보드","마우스","스탠딩","오피스디포"],
   "채용·면접":    ["채용","면접","지원자","포지션","인터뷰","합격","이력서","온보딩"],
   "증명서·서류":  ["4대보험","증명서","재직","완납","인정서"],
@@ -57,384 +51,551 @@ function classify(text) {
   return "기타";
 }
 
-/* ── 시스템 프롬프트 ── */
-const SYS = `당신은 딥노이드(Deepnoid) 임직원 전용 AI 도우미 NOVA입니다.
-P&C팀 이성훈 과장의 업무 지침을 바탕으로 임직원 문의에 친절하고 명확하게 한국어로 답변합니다.
-답변은 3~5줄로 간결하게, 담당자 연락처를 포함하세요.
+/* ── localStorage ── */
+function lsGet(k){try{const v=localStorage.getItem(k);return v?JSON.parse(v):null;}catch{return null;}}
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch{}}
 
-[법인차량 운행일지] 매월 5일까지 전월 운행일지+계기판 사진 → sh.lee@deepnoid.com
-[직인 날인] ERP 인감사용신청서 기안 → 승인 후 이성훈 과장에게 Teams 방문 요청
-[4대보험 완납증명서] 김유리 대리(yrkim@deepnoid.com) 당일 발급
-[비품·구매] 종류·수량·용도를 이성훈 과장에게 요청. 10만원↑ 시 품의서 필요
-[기안 결재라인] 일반: 팀장→본부장. 10만원↑ 지출: 대표이사 결재 필수
-[온보딩] 자리세팅·장비: P&C팀 담당. 웰컴런치: 팀장+동일직군 팀원 필수
-[주차·출입카드] 차량번호 또는 폰 정보를 이성훈 과장에게 Teams 전달
-[출장] 항공·KTX: P&C팀에 사전 요청. 법인카드 한도: 재경팀 한유정 대리
-[명함] 이성훈 과장에게 정보 전달 → 시안 확인 → 3~5영업일 제작
-
-모르는 내용: "P&C팀 이성훈 과장(sh.lee@deepnoid.com / 010-9588-0153)에게 문의해 주세요."
-모든 답변 끝에 반드시: "추가 문의사항이 있으시면 언제든지 말씀해 주세요 😊" 추가.`;
-
-/* ── FAQ 목록 ── */
-const FAQS = [
-  {q:"법인차량 운행일지는 언제까지 제출하나요?",cat:"법인차량",a:"매월 5일까지 전월 운행일지+계기판 사진을 sh.lee@deepnoid.com으로 제출해 주세요."},
-  {q:"직인(법인인감) 날인 신청 방법은?",cat:"직인·계약",a:"① ERP 인감사용신청서 기안 ② 승인 후 이성훈 과장 Teams 방문 요청 ③ 방문 날인."},
-  {q:"4대보험 완납증명서 발급은 어떻게?",cat:"증명서·서류",a:"P&C팀 김유리 대리(yrkim@deepnoid.com)에게 요청하시면 당일 발급 가능합니다."},
-  {q:"비품·사무용품 구매 요청 방법은?",cat:"비품·구매",a:"종류·수량·용도를 이성훈 과장에게 알려주세요. 10만원 이상 시 품의서 기안 필요."},
-  {q:"기안품의서 결재라인은 어떻게 구성하나요?",cat:"기안·결재",a:"일반: 팀장→본부장. 10만원 이상 지출 건은 대표이사 결재까지 필요합니다."},
-  {q:"신규입사자 온보딩 준비는 어떻게?",cat:"채용·면접",a:"자리세팅·장비지급은 P&C팀 담당. 웰컴런치는 팀장+동일직군 팀원 필수 참석."},
-  {q:"주차 등록은 어떻게 하나요?",cat:"시설·총무",a:"차량번호를 이성훈 과장에게 Teams 메시지로 전달해 주시면 등록해 드립니다."},
-  {q:"해외출장 항공권·숙소 예약 방법은?",cat:"출장·법인카드",a:"출발일·목적지·인원을 P&C팀에 사전 요청. 법인카드 한도: 재경팀 한유정 대리."},
-  {q:"명함 제작은 어떻게 신청하나요?",cat:"시설·총무",a:"이성훈 과장에게 정보 전달 → 시안 확인 후 회신 → 약 3~5 영업일 제작."},
-  {q:"모바일 출입카드를 재발급받으려면?",cat:"시설·총무",a:"폰을 교체하셨다면 이성훈 과장에게 Teams로 재발급 요청해 주세요."},
+/* ── 기본 FAQ (관리자가 수정 가능) ── */
+const DEFAULT_FAQS = [
+  {id:1,cat:"법인차량",q:"법인차량 운행일지는 언제까지 제출하나요?",a:"매월 5일까지 전월 운행일지 + 계기판 사진을 sh.lee@deepnoid.com으로 제출해 주세요."},
+  {id:2,cat:"직인·계약",q:"직인(법인인감) 날인은 어떻게 신청하나요?",a:"① ERP 인감사용신청서 기안 ② 승인 후 이성훈 과장 Teams 방문 요청 ③ 직접 방문하여 날인."},
+  {id:3,cat:"증명서·서류",q:"4대보험 완납증명서 발급은 어떻게 받나요?",a:"P&C팀 김유리 대리(yrkim@deepnoid.com)에게 요청하시면 당일 발급 가능합니다."},
+  {id:4,cat:"비품·구매",q:"사무용품 구매는 어떻게 요청하나요?",a:"종류·수량·용도를 이성훈 과장에게 알려주세요. 10만원 이상 시 품의서 기안 필요합니다."},
+  {id:5,cat:"기안·결재",q:"기안품의서 결재라인은 어떻게 구성하나요?",a:"일반: 팀장→본부장. 10만원 이상 지출 건은 대표이사 결재까지 필요합니다."},
+  {id:6,cat:"채용·면접",q:"신규입사자 온보딩 준비는 어떻게 하나요?",a:"자리세팅·장비지급은 P&C팀 담당. 웰컴런치는 팀장 + 동일직군 팀원 필수 참석."},
+  {id:7,cat:"시설·총무",q:"주차 등록은 어떻게 하나요?",a:"차량번호를 이성훈 과장에게 Teams 메시지로 전달해 주시면 등록해 드립니다."},
+  {id:8,cat:"출장·법인카드",q:"해외출장 항공권 예약은 어떻게 하나요?",a:"출발일·목적지·인원을 P&C팀에 사전 요청해 주세요. 법인카드 한도: 재경팀 한유정 대리."},
+  {id:9,cat:"시설·총무",q:"명함 제작은 어떻게 신청하나요?",a:"이성훈 과장에게 명함 정보를 전달 → 시안 확인 후 회신 → 약 3~5 영업일 제작."},
+  {id:10,cat:"시설·총무",q:"모바일 출입카드를 재발급받으려면?",a:"폰을 교체하셨다면 이성훈 과장에게 Teams로 재발급을 요청해 주세요."},
 ];
 
-/* ── localStorage 헬퍼 ── */
-function lsGet(key) { try { const v=localStorage.getItem(key); return v?JSON.parse(v):null; } catch{return null;} }
-function lsSet(key,val) { try { localStorage.setItem(key,JSON.stringify(val)); } catch{} }
-
-/* ── NOVA 아바타 ── */
-function NovaAvatar({size=60,glow=false}) {
+/* ── DAON 아바타 — 귀여운 곰돌이 ── */
+function DaonAvatar({size=60,talking=false}){
   return (
     <div style={{position:"relative",width:size,height:size,flexShrink:0}}>
-      {glow&&<div style={{position:"absolute",inset:-5,borderRadius:"50%",background:"rgba(96,165,250,.25)",animation:"novaPulse 2s ease-in-out infinite"}}/>}
-      <svg viewBox="0 0 80 80" width={size} height={size} style={{display:"block"}}>
-        <defs>
-          <radialGradient id="ng" cx="38%" cy="30%" r="65%">
-            <stop offset="0%" stopColor="#3b82f6"/>
-            <stop offset="100%" stopColor="#1e3a8a"/>
-          </radialGradient>
-        </defs>
-        <circle cx="40" cy="40" r="38" fill="url(#ng)"/>
-        <ellipse cx="28" cy="20" rx="11" ry="7" fill="rgba(255,255,255,.13)"/>
-        <rect x="1" y="30" width="8" height="16" rx="4" fill="#1d4ed8"/>
-        <rect x="71" y="30" width="8" height="16" rx="4" fill="#1d4ed8"/>
-        <circle cx="28" cy="37" r="10" fill="white"/>
-        <circle cx="52" cy="37" r="10" fill="white"/>
-        <circle cx="30" cy="36" r="6" fill="#1d4ed8"/>
-        <circle cx="54" cy="36" r="6" fill="#1d4ed8"/>
-        <circle cx="32" cy="33" r="2.5" fill="white"/>
-        <circle cx="56" cy="33" r="2.5" fill="white"/>
-        <path d="M24 54 Q40 66 56 54" stroke="white" strokeWidth="3.5" fill="none" strokeLinecap="round"/>
-        <circle cx="17" cy="50" r="5.5" fill="rgba(251,191,36,.3)"/>
-        <circle cx="63" cy="50" r="5.5" fill="rgba(251,191,36,.3)"/>
-        <line x1="40" y1="2" x2="40" y2="13" stroke="#93c5fd" strokeWidth="3" strokeLinecap="round"/>
-        <circle cx="40" cy="1.5" r="5" fill="#60a5fa"/>
-        <circle cx="40" cy="1.5" r="2.5" fill="white"/>
+      <svg viewBox="0 0 100 100" width={size} height={size} style={{display:"block",filter:"drop-shadow(0 4px 12px rgba(37,99,235,0.25))"}}>
+        {/* 귀 */}
+        <circle cx="22" cy="26" r="16" fill="#60a5fa"/>
+        <circle cx="78" cy="26" r="16" fill="#60a5fa"/>
+        <circle cx="22" cy="26" r="9" fill="#bfdbfe"/>
+        <circle cx="78" cy="26" r="9" fill="#bfdbfe"/>
+        {/* 얼굴 */}
+        <circle cx="50" cy="55" r="38" fill="#2563eb"/>
+        <circle cx="50" cy="55" r="34" fill="#3b82f6"/>
+        {/* 배 (밝은 부분) */}
+        <ellipse cx="50" cy="68" rx="20" ry="16" fill="#93c5fd" opacity="0.5"/>
+        {/* 눈 */}
+        <ellipse cx="36" cy="46" rx="7" ry={talking?6:7} fill="white" style={{animation:talking?"wink 2s ease-in-out infinite":""}}/>
+        <ellipse cx="64" cy="46" rx="7" ry="7" fill="white"/>
+        <circle cx="38" cy="45" r="4" fill="#1e3a8a"/>
+        <circle cx="66" cy="45" r="4" fill="#1e3a8a"/>
+        {/* 눈 반짝임 */}
+        <circle cx="40" cy="43" r="1.5" fill="white"/>
+        <circle cx="68" cy="43" r="1.5" fill="white"/>
+        {/* 코 */}
+        <ellipse cx="50" cy="57" rx="5" ry="3.5" fill="#1e3a8a"/>
+        {/* 입 */}
+        <path d={talking?"M38 64 Q50 74 62 64":"M38 63 Q50 72 62 63"} stroke="white" strokeWidth="2.5" fill="none" strokeLinecap="round"/>
+        {/* 볼터치 */}
+        <circle cx="26" cy="58" r="7" fill="#fbbf24" opacity="0.35"/>
+        <circle cx="74" cy="58" r="7" fill="#fbbf24" opacity="0.35"/>
+        {/* 왕관/리본 - 귀여운 별 */}
+        <polygon points="50,8 53,16 62,16 55,21 58,30 50,25 42,30 45,21 38,16 47,16" fill="#fbbf24" opacity="0.9"/>
       </svg>
+      {talking && (
+        <div style={{position:"absolute",bottom:-2,right:-2,width:16,height:16,borderRadius:"50%",background:"#10b981",border:"2px solid white",animation:"blink 1.5s ease-in-out infinite"}}/>
+      )}
     </div>
   );
 }
 
-/* ── 로그인 ── */
-function LoginPage({onLogin}) {
-  const [id,setId]=useState(""); const [pw,setPw]=useState(""); const [err,setErr]=useState(""); const [busy,setBusy]=useState(false);
-  function submit(e){
-    e.preventDefault(); setBusy(true);
-    setTimeout(()=>{
-      const acc=ACCOUNTS[id.trim()];
-      if(acc&&acc.pw===pw){onLogin({id:id.trim(),...acc});}
-      else{setErr("아이디 또는 비밀번호를 확인해 주세요.");setBusy(false);}
-    },700);
-  }
-  const iStyle={padding:"11px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box",transition:"border-color .15s"};
+/* ── 이름 입력 화면 ── */
+function NameInputPage({onStart}){
+  const [name,setName]=useState("");
+  const [dept,setDept]=useState("");
+  const [focused,setFocused]=useState(null);
+
   return (
-    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(145deg,#1e3a8a 0%,#1d4ed8 55%,#2563eb 100%)"}}>
-      <div style={{position:"fixed",top:-120,right:-120,width:400,height:400,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
-      <div style={{position:"fixed",bottom:-80,left:-80,width:300,height:300,borderRadius:"50%",background:"rgba(255,255,255,.04)",pointerEvents:"none"}}/>
-      <div style={{background:"white",borderRadius:24,padding:"2.5rem 2rem",width:400,boxShadow:"0 30px 80px rgba(0,0,0,.35)",animation:"fadeIn .4s ease",position:"relative"}}>
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:"2rem",gap:12}}>
-          <NovaAvatar size={80} glow/>
+    <div style={{minHeight:"100vh",display:"flex",alignItems:"center",justifyContent:"center",background:"linear-gradient(145deg,#eff6ff 0%,#dbeafe 40%,#bfdbfe 100%)"}}>
+      {/* 배경 원형 장식 */}
+      <div style={{position:"fixed",top:-100,right:-100,width:400,height:400,borderRadius:"50%",background:"rgba(37,99,235,0.06)",pointerEvents:"none"}}/>
+      <div style={{position:"fixed",bottom:-80,left:-80,width:350,height:350,borderRadius:"50%",background:"rgba(37,99,235,0.06)",pointerEvents:"none"}}/>
+
+      <div style={{background:"white",borderRadius:28,padding:"2.5rem 2rem",width:400,boxShadow:"0 20px 60px rgba(37,99,235,0.12)",animation:"fadeIn .5s ease"}}>
+        {/* 상단 아바타 + 이름 */}
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:"2rem",gap:14}}>
+          <div style={{animation:"bounce 3s ease-in-out infinite"}}>
+            <DaonAvatar size={90}/>
+          </div>
           <div style={{textAlign:"center"}}>
-            <div style={{fontSize:30,fontWeight:800,color:"#1e3a8a",letterSpacing:"-0.04em",lineHeight:1}}>NOVA</div>
-            <div style={{fontSize:10,color:"#6b7280",marginTop:4,letterSpacing:".08em"}}>DEEPNOID OFFICE VIRTUAL ASSISTANT</div>
-            <div style={{width:40,height:3,background:"#2563eb",borderRadius:2,margin:"8px auto 0"}}/>
+            <div style={{fontSize:28,fontWeight:800,color:"#1e3a8a",letterSpacing:"-0.04em",lineHeight:1}}>
+              {BOT_NAME}
+            </div>
+            <div style={{fontSize:11,color:"#60a5fa",marginTop:5,letterSpacing:".1em",fontWeight:600}}>
+              DEEPNOID AI 도우미
+            </div>
+            <div style={{fontSize:12,color:"#6b7280",marginTop:6,lineHeight:1.6}}>
+              안녕하세요! 저는 딥노이드 P&C팀의<br/>AI 도우미 DAON이에요 😊<br/>이름을 알려주시면 도와드릴게요!
+            </div>
           </div>
         </div>
-        <form onSubmit={submit} style={{display:"flex",flexDirection:"column",gap:12}}>
-          <div>
-            <label style={{fontSize:12,fontWeight:600,color:"#374151",display:"block",marginBottom:5}}>사번 / 아이디</label>
-            <input value={id} onChange={e=>{setId(e.target.value);setErr("");}} placeholder="예: sh.lee" style={iStyle}
-              onFocus={e=>e.target.style.borderColor="#2563eb"} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-          </div>
-          <div>
-            <label style={{fontSize:12,fontWeight:600,color:"#374151",display:"block",marginBottom:5}}>비밀번호</label>
-            <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}} placeholder="비밀번호 입력" style={iStyle}
-              onFocus={e=>e.target.style.borderColor="#2563eb"} onBlur={e=>e.target.style.borderColor="#e5e7eb"}/>
-          </div>
-          {err&&<div style={{fontSize:12,color:"#dc2626",textAlign:"center",padding:"4px 0"}}>{err}</div>}
-          <button type="submit" disabled={!id||!pw||busy} style={{
-            marginTop:4,padding:"13px",background:(!id||!pw||busy)?"#93c5fd":"#1d4ed8",color:"white",
-            border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:(!id||!pw||busy)?"not-allowed":"pointer",transition:"background .15s"
-          }}>{busy?"로그인 중...":"로그인 →"}</button>
-        </form>
-        <div style={{marginTop:"1.5rem",background:"#eff6ff",borderRadius:12,padding:"12px 14px",border:"1px solid #bfdbfe"}}>
-          <div style={{fontSize:11,fontWeight:700,color:"#1d4ed8",marginBottom:6}}>🔑 테스트 계정</div>
-          <div style={{fontSize:11,color:"#374151",lineHeight:1.9}}>
-            관리자: <b>sh.lee</b> / deepnoid1234<br/>
-            일반: <b>yrkim</b>, <b>majin</b>, <b>jhyun</b> / deepnoid1234
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
-/* ── 사이드바 ── */
-function Sidebar({page,setPage,user,onLogout}) {
-  const nav=[
-    {id:"chat",icon:"💬",label:"NOVA 채팅"},
-    {id:"faq",icon:"📋",label:"FAQ 목록"},
-    {id:"guidelines",icon:"📁",label:"지침·규정"},
-    ...(user.role==="admin"?[{id:"analytics",icon:"📊",label:"문의 분석"}]:[]),
-  ];
-  return (
-    <div style={{width:210,minHeight:"100vh",background:"#1e3a8a",display:"flex",flexDirection:"column",flexShrink:0}}>
-      <div style={{padding:"18px 16px",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
-        <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <NovaAvatar size={38}/>
+        <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <div>
-            <div style={{color:"white",fontWeight:800,fontSize:17,letterSpacing:"-0.02em"}}>NOVA</div>
-            <div style={{color:"#93c5fd",fontSize:9,letterSpacing:".04em"}}>DEEPNOID AI 도우미</div>
+            <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:5}}>이름 <span style={{color:"#ef4444"}}>*</span></label>
+            <input
+              value={name} onChange={e=>setName(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&name.trim()&&onStart(name.trim(),dept.trim())}
+              placeholder="예: 홍길동"
+              style={{width:"100%",padding:"12px 14px",border:`1.5px solid ${focused==="name"?"#2563eb":"#e5e7eb"}`,borderRadius:12,fontSize:14,outline:"none",transition:"border-color .15s",boxSizing:"border-box"}}
+              onFocus={()=>setFocused("name")} onBlur={()=>setFocused(null)}
+            />
           </div>
-        </div>
-      </div>
-      <nav style={{flex:1,padding:"10px 8px"}}>
-        {nav.map(n=>(
-          <button key={n.id} onClick={()=>setPage(n.id)} style={{
-            width:"100%",display:"flex",alignItems:"center",gap:10,padding:"10px 14px",
-            borderRadius:10,border:"none",cursor:"pointer",marginBottom:3,fontSize:13,fontWeight:500,
-            background:page===n.id?"rgba(255,255,255,.15)":"transparent",
-            color:page===n.id?"white":"#93c5fd",transition:"all .15s",textAlign:"left"
-          }}>
-            <span style={{fontSize:16}}>{n.icon}</span>{n.label}
-            {page===n.id&&<div style={{marginLeft:"auto",width:4,height:4,borderRadius:"50%",background:"#60a5fa"}}/>}
+          <div>
+            <label style={{fontSize:12,fontWeight:700,color:"#374151",display:"block",marginBottom:5}}>소속 부서 <span style={{color:"#9ca3af",fontWeight:400"}}>(선택)</span></label>
+            <input
+              value={dept} onChange={e=>setDept(e.target.value)}
+              onKeyDown={e=>e.key==="Enter"&&name.trim()&&onStart(name.trim(),dept.trim())}
+              placeholder="예: 연구개발본부"
+              style={{width:"100%",padding:"12px 14px",border:`1.5px solid ${focused==="dept"?"#2563eb":"#e5e7eb"}`,borderRadius:12,fontSize:14,outline:"none",transition:"border-color .15s",boxSizing:"border-box"}}
+              onFocus={()=>setFocused("dept")} onBlur={()=>setFocused(null)}
+            />
+          </div>
+          <button
+            onClick={()=>name.trim()&&onStart(name.trim(),dept.trim())}
+            disabled={!name.trim()}
+            style={{marginTop:4,padding:"13px",background:!name.trim()?"#bfdbfe":"linear-gradient(135deg,#2563eb,#1d4ed8)",color:"white",border:"none",borderRadius:12,fontSize:15,fontWeight:700,cursor:!name.trim()?"not-allowed":"pointer",transition:"all .15s",boxShadow:name.trim()?"0 4px 14px rgba(37,99,235,0.35)":"none"}}
+          >
+            시작하기 →
           </button>
-        ))}
-      </nav>
-      <div style={{padding:"10px 10px 14px"}}>
-        <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:10,background:"rgba(255,255,255,.08)",marginBottom:8}}>
-          <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"white",flexShrink:0}}>
-            {user.name[0]}
-          </div>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{color:"white",fontSize:12,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.name} {user.title}</div>
-            <div style={{color:"#93c5fd",fontSize:10}}>{user.dept}</div>
-          </div>
-          {user.role==="admin"&&<span style={{fontSize:9,background:"#fbbf24",color:"#1e3a8a",padding:"1px 5px",borderRadius:4,fontWeight:700}}>관리자</span>}
         </div>
-        <button onClick={onLogout} style={{width:"100%",padding:"8px",background:"transparent",border:"1px solid rgba(255,255,255,.15)",borderRadius:8,color:"#93c5fd",fontSize:12,cursor:"pointer"}}>로그아웃</button>
+
+        {/* 테스트 배지 */}
+        <div style={{marginTop:"1.25rem",padding:"10px 14px",background:"#fef3c7",borderRadius:10,border:"1px solid #fcd34d",display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>🧪</span>
+          <div style={{fontSize:11,color:"#92400e",lineHeight:1.5}}>
+            <b>테스트 버전입니다.</b> 사용하시면서 불편한 점이나 개선 사항을 알려주세요!
+          </div>
+        </div>
+
+        {/* 관리자 진입 */}
+        <div style={{marginTop:12,textAlign:"center"}}>
+          <button onClick={()=>onStart("__ADMIN__","")} style={{fontSize:11,color:"#9ca3af",background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
+            관리자 로그인
+          </button>
+        </div>
       </div>
     </div>
   );
 }
 
-/* ── 채팅 ── */
-function ChatPage({user,onLog}) {
-  const [msgs,setMsgs]=useState([{role:"nova",text:`안녕하세요, ${user.name} ${user.title}님! 👋\n\nNOVA입니다. 법인차량, 직인 날인, 비품 구매, 채용 면접, 증명서 발급 등 P&C팀 관련 업무라면 무엇이든 도와드릴게요!\n\n궁금하신 점을 편하게 말씀해 주세요 😊`,ts:Date.now()}]);
-  const [input,setInput]=useState(""); const [busy,setBusy]=useState(false);
-  const bottom=useRef(null); const inputEl=useRef(null);
-  useEffect(()=>{bottom.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
-  const chips=["법인차량 운행일지 제출 방법","직인 날인 신청하려면?","비품 구매 요청 방법","4대보험 완납증명서 발급"];
+/* ── 채팅 페이지 ── */
+function ChatPage({userName,userDept,onLog,faqs,onAdminOpen}){
+  const SYS = `당신은 딥노이드(Deepnoid) 임직원을 위한 AI 도우미 DAON입니다.
+P&C팀 업무 지침을 바탕으로 친절하고 따뜻하게 한국어로 답변합니다.
+답변은 3~5줄로 간결하게, 담당자 연락처를 포함하세요.
+항상 "${userName}님"이라고 부르며 친근하게 대화하세요.
 
-  async function send(text) {
-    text=(text||input).trim(); if(!text||busy)return;
+[현재 FAQ 지식베이스]
+${faqs.map(f=>`[${f.cat}] Q: ${f.q} A: ${f.a}`).join("\n")}
+
+[추가 지침]
+법인차량 운행일지: 매월 5일까지 → sh.lee@deepnoid.com
+직인 날인: ERP 인감사용신청서 기안 후 이성훈 과장 방문
+4대보험: 김유리 대리(yrkim@deepnoid.com) 당일 발급
+비품: 10만원 이상 품의서 필요
+주차·출입카드·명함: 이성훈 과장 Teams 요청
+출장: 사전 P&C팀 요청. 법인카드 한도: 재경팀 한유정 대리
+
+모르는 내용: "P&C팀 이성훈 과장(sh.lee@deepnoid.com)에게 문의해 주세요."
+모든 답변 끝에: "더 궁금한 점이 있으시면 언제든지 말씀해 주세요 😊" 추가.`;
+
+  const [msgs,setMsgs]=useState([{
+    role:"daon",
+    text:`안녕하세요, ${userName}님! 👋\n\n저는 딥노이드 P&C팀 AI 도우미 DAON이에요.\n법인차량, 직인 날인, 비품 구매, 증명서 발급 등\n업무 관련 궁금한 점을 편하게 물어봐 주세요! 😊`,
+    ts:Date.now()
+  }]);
+  const [input,setInput]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [showFeedback,setShowFeedback]=useState(false);
+  const [feedback,setFeedback]=useState("");
+  const bottom=useRef(null);
+  const inputEl=useRef(null);
+  useEffect(()=>{bottom.current?.scrollIntoView({behavior:"smooth"});},[msgs]);
+
+  const chips=["법인차량 운행일지 제출","직인 날인 신청","비품 구매 요청","4대보험 완납증명서"];
+
+  async function send(text){
+    text=(text||input).trim();if(!text||busy)return;
     setInput("");
     const cat=classify(text);
     setMsgs(prev=>[...prev,{role:"user",text,cat,ts:Date.now()}]);
-    onLog({text,cat,user:user.name,dept:user.dept,ts:Date.now()});
+    onLog({text,cat,user:userName,dept:userDept,ts:Date.now()});
     setBusy(true);
-    try {
+    try{
       const history=msgs.slice(1).map(m=>({role:m.role==="user"?"user":"assistant",content:m.text}));
       history.push({role:"user",content:text});
-      const res = await fetch("https://nova-psi-puce.vercel.app/api/chat", {
+      const res=await fetch("/api/chat",{
         method:"POST",headers:{"Content-Type":"application/json"},
-        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:1000,system:SYS,messages:history}),
+        body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:500,system:SYS,messages:history}),
       });
       const d=await res.json();
-const reply = d.content?.[0]?.text || `[오류] ${d.error?.message || JSON.stringify(d)}`;      setMsgs(prev=>[...prev,{role:"nova",text:reply,ts:Date.now()}]);
-    } catch {
-      setMsgs(prev=>[...prev,{role:"nova",text:"네트워크 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.",ts:Date.now()}]);
+      const reply=d.content?.[0]?.text||d.error?.message||"죄송해요, 잠시 후 다시 시도해 주세요.";
+      setMsgs(prev=>[...prev,{role:"daon",text:reply,ts:Date.now()}]);
+    }catch{
+      setMsgs(prev=>[...prev,{role:"daon",text:"네트워크 오류가 발생했어요. 잠시 후 다시 시도해 주세요.",ts:Date.now()}]);
     }
     setBusy(false);
   }
 
+  function submitFeedback(){
+    if(!feedback.trim())return;
+    const logs=lsGet("daon-feedback")||[];
+    logs.push({text:feedback,user:userName,dept:userDept,ts:Date.now()});
+    lsSet("daon-feedback",logs);
+    setFeedback("");setShowFeedback(false);
+    setMsgs(prev=>[...prev,{role:"daon",text:"소중한 의견 감사합니다! 더 나은 DAON이 될게요 🙏",ts:Date.now()}]);
+  }
+
   return (
     <div style={{display:"flex",flexDirection:"column",height:"100vh",background:"#f0f5ff"}}>
-      <div style={{display:"flex",alignItems:"center",gap:12,padding:"12px 20px",background:"white",borderBottom:"1px solid #e5e7eb",boxShadow:"0 1px 6px rgba(30,58,138,.06)"}}>
-        <NovaAvatar size={42} glow={busy}/>
+      {/* 헤더 */}
+      <div style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",background:"white",borderBottom:"1px solid #e5e7eb",boxShadow:"0 1px 6px rgba(30,58,138,.06)"}}>
+        <DaonAvatar size={44} talking={busy}/>
         <div style={{flex:1}}>
-          <div style={{fontSize:16,fontWeight:800,color:"#1e3a8a",letterSpacing:"-0.02em"}}>NOVA</div>
+          <div style={{fontSize:16,fontWeight:800,color:"#1e3a8a",letterSpacing:"-0.02em"}}>{BOT_NAME}</div>
           <div style={{fontSize:11,color:busy?"#f59e0b":"#10b981",display:"flex",alignItems:"center",gap:4}}>
             <div style={{width:6,height:6,borderRadius:"50%",background:busy?"#f59e0b":"#10b981"}}/>
-            {busy?"답변 생성 중...":"온라인 · 언제든지 물어보세요"}
+            {busy?"답변 생성 중...":"온라인 · 무엇이든 물어보세요"}
           </div>
         </div>
-        <div style={{fontSize:11,color:"#9ca3af"}}>딥노이드 임직원 전용</div>
+        <div style={{display:"flex",gap:6}}>
+          <button onClick={()=>setShowFeedback(true)} style={{fontSize:11,padding:"5px 10px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:8,color:"#1d4ed8",cursor:"pointer",fontWeight:600}}>
+            💬 피드백
+          </button>
+          <button onClick={onAdminOpen} style={{fontSize:11,padding:"5px 10px",background:"#f3f4f6",border:"1px solid #e5e7eb",borderRadius:8,color:"#6b7280",cursor:"pointer"}}>
+            ⚙️
+          </button>
+        </div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"16px 20px 8px",display:"flex",flexDirection:"column",gap:14}}>
+
+      {/* 메시지 */}
+      <div style={{flex:1,overflowY:"auto",padding:"16px 16px 8px",display:"flex",flexDirection:"column",gap:12}}>
         {msgs.map((m,i)=>(
           <div key={i} style={{display:"flex",gap:10,flexDirection:m.role==="user"?"row-reverse":"row",alignItems:"flex-end",animation:"fadeIn .25s ease"}}>
-            {m.role==="nova"&&<NovaAvatar size={34}/>}
-            {m.role==="user"&&<div style={{width:34,height:34,borderRadius:"50%",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"white",flexShrink:0}}>{user.name[0]}</div>}
-            <div style={{maxWidth:"74%"}}>
-              {m.cat&&<div style={{display:"inline-flex",alignItems:"center",fontSize:9,fontWeight:700,padding:"2px 9px",borderRadius:12,marginBottom:5,background:CAT_COLOR[m.cat]||"#6b7280",color:"white",letterSpacing:".04em"}}>{m.cat}</div>}
-              <div style={{padding:"11px 15px",fontSize:13,lineHeight:1.65,whiteSpace:"pre-wrap",borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",background:m.role==="user"?"linear-gradient(135deg,#2563eb,#1d4ed8)":"white",color:m.role==="user"?"white":"#111827",boxShadow:m.role==="user"?"0 4px 14px rgba(29,78,216,.25)":"0 2px 10px rgba(0,0,0,.06)",border:m.role==="nova"?"1px solid #e5e7eb":"none"}}>{m.text}</div>
+            {m.role==="daon"&&<DaonAvatar size={36} talking={i===msgs.length-1&&busy}/>}
+            {m.role==="user"&&(
+              <div style={{width:36,height:36,borderRadius:"50%",background:"linear-gradient(135deg,#3b82f6,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:700,color:"white",flexShrink:0}}>
+                {userName[0]}
+              </div>
+            )}
+            <div style={{maxWidth:"76%"}}>
+              {m.cat&&<div style={{display:"inline-flex",fontSize:9,fontWeight:700,padding:"2px 9px",borderRadius:12,marginBottom:5,background:CAT_COLOR[m.cat]||"#6b7280",color:"white",letterSpacing:".04em"}}>{m.cat}</div>}
+              <div style={{padding:"11px 15px",fontSize:13,lineHeight:1.7,whiteSpace:"pre-wrap",borderRadius:m.role==="user"?"18px 18px 4px 18px":"18px 18px 18px 4px",background:m.role==="user"?"linear-gradient(135deg,#2563eb,#1d4ed8)":"white",color:m.role==="user"?"white":"#111827",boxShadow:m.role==="user"?"0 4px 14px rgba(29,78,216,.22)":"0 2px 10px rgba(0,0,0,.06)",border:m.role==="daon"?"1px solid #e5e7eb":"none"}}>
+                {m.text}
+              </div>
             </div>
           </div>
         ))}
-        {busy&&<div style={{display:"flex",gap:10,alignItems:"flex-end"}}><NovaAvatar size={34}/><div style={{padding:"13px 16px",background:"white",borderRadius:"18px 18px 18px 4px",border:"1px solid #e5e7eb",boxShadow:"0 2px 10px rgba(0,0,0,.06)",display:"flex",gap:5,alignItems:"center"}}>{[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#93c5fd",animation:`novaDot 1.2s ease-in-out ${i*.2}s infinite`}}/>)}</div></div>}
+        {busy&&(
+          <div style={{display:"flex",gap:10,alignItems:"flex-end"}}>
+            <DaonAvatar size={36} talking/>
+            <div style={{padding:"13px 16px",background:"white",borderRadius:"18px 18px 18px 4px",border:"1px solid #e5e7eb",display:"flex",gap:5,alignItems:"center"}}>
+              {[0,1,2].map(i=><div key={i} style={{width:7,height:7,borderRadius:"50%",background:"#93c5fd",animation:`dot 1.2s ease-in-out ${i*.2}s infinite`}}/>)}
+            </div>
+          </div>
+        )}
         <div ref={bottom}/>
       </div>
-      <div style={{padding:"8px 20px",background:"white",borderTop:"1px solid #f3f4f6",display:"flex",gap:6,flexWrap:"wrap"}}>
-        {chips.map(q=><button key={q} onClick={()=>send(q)} style={{padding:"5px 12px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,fontSize:11,color:"#1d4ed8",cursor:"pointer",fontWeight:600}}>{q}</button>)}
+
+      {/* 빠른 질문 */}
+      <div style={{padding:"8px 16px",background:"white",borderTop:"1px solid #f3f4f6",display:"flex",gap:6,flexWrap:"wrap"}}>
+        {chips.map(q=>(
+          <button key={q} onClick={()=>send(q)} style={{padding:"5px 12px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:20,fontSize:11,color:"#1d4ed8",cursor:"pointer",fontWeight:600}}>
+            {q}
+          </button>
+        ))}
       </div>
-      <div style={{padding:"12px 20px 16px",background:"white",display:"flex",gap:10}}>
-        <input ref={inputEl} value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
-          placeholder="궁금한 점을 자유롭게 입력하세요..." style={{flex:1,padding:"12px 16px",border:"1.5px solid #bfdbfe",borderRadius:14,fontSize:14,outline:"none",background:"#f8faff",transition:"border-color .15s"}}
-          onFocus={e=>e.target.style.borderColor="#2563eb"} onBlur={e=>e.target.style.borderColor="#bfdbfe"}/>
-        <button onClick={()=>send()} disabled={!input.trim()||busy} style={{width:48,height:48,borderRadius:14,border:"none",flexShrink:0,background:(!input.trim()||busy)?"#bfdbfe":"linear-gradient(135deg,#2563eb,#1d4ed8)",color:"white",fontSize:20,cursor:(!input.trim()||busy)?"not-allowed":"pointer",boxShadow:(!input.trim()||busy)?"none":"0 4px 12px rgba(29,78,216,.35)",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center"}}>→</button>
+
+      {/* 입력 */}
+      <div style={{padding:"10px 16px 14px",background:"white",display:"flex",gap:10}}>
+        <input ref={inputEl} value={input} onChange={e=>setInput(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
+          placeholder="궁금한 점을 자유롭게 입력하세요..."
+          style={{flex:1,padding:"12px 16px",border:"1.5px solid #bfdbfe",borderRadius:14,fontSize:14,outline:"none",background:"#f8faff",transition:"border-color .15s"}}
+          onFocus={e=>e.target.style.borderColor="#2563eb"}
+          onBlur={e=>e.target.style.borderColor="#bfdbfe"}
+        />
+        <button onClick={()=>send()} disabled={!input.trim()||busy} style={{width:48,height:48,borderRadius:14,border:"none",flexShrink:0,background:(!input.trim()||busy)?"#bfdbfe":"linear-gradient(135deg,#2563eb,#1d4ed8)",color:"white",fontSize:20,cursor:(!input.trim()||busy)?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:(!input.trim()||busy)?"none":"0 4px 12px rgba(29,78,216,.35)",transition:"all .15s"}}>
+          →
+        </button>
       </div>
+
+      {/* 피드백 모달 */}
+      {showFeedback&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100}}>
+          <div style={{background:"white",borderRadius:20,padding:"1.5rem",width:360,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:16,fontWeight:700,color:"#1e3a8a",marginBottom:12}}>💬 피드백 남기기</div>
+            <textarea value={feedback} onChange={e=>setFeedback(e.target.value)}
+              placeholder="불편한 점, 개선 사항, 추가됐으면 하는 기능 등 자유롭게 적어주세요!"
+              style={{width:"100%",height:120,padding:"10px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:13,outline:"none",resize:"none",boxSizing:"border-box"}}
+            />
+            <div style={{display:"flex",gap:8,marginTop:10}}>
+              <button onClick={()=>setShowFeedback(false)} style={{flex:1,padding:"10px",background:"#f3f4f6",border:"none",borderRadius:10,fontSize:13,cursor:"pointer"}}>취소</button>
+              <button onClick={submitFeedback} style={{flex:2,padding:"10px",background:"#1d4ed8",color:"white",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>제출</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-/* ── 분석 ── */
-function AnalyticsPage({qs}) {
+/* ── 관리자 모드 ── */
+function AdminPage({onClose,faqs,setFaqs,qs}){
+  const [tab,setTab]=useState("faq");
+  const [editId,setEditId]=useState(null);
+  const [editData,setEditData]=useState({});
+  const [newFaq,setNewFaq]=useState({cat:"기타",q:"",a:""});
+  const [showAdd,setShowAdd]=useState(false);
+  const feedbacks=lsGet("daon-feedback")||[];
+
+  // 카테고리별 통계
   const cats={},users={};
   qs.forEach(q=>{cats[q.cat]=(cats[q.cat]||0)+1;users[q.user]=(users[q.user]||0)+1;});
   const maxC=Math.max(1,...Object.values(cats));
   const sorted=Object.entries(cats).sort((a,b)=>b[1]-a[1]);
+
+  function saveEdit(id){
+    setFaqs(prev=>{const n=prev.map(f=>f.id===id?{...f,...editData}:f);lsSet("daon-faqs",n);return n;});
+    setEditId(null);
+  }
+  function deleteFaq(id){
+    if(!confirm("삭제하시겠습니까?"))return;
+    setFaqs(prev=>{const n=prev.filter(f=>f.id!==id);lsSet("daon-faqs",n);return n;});
+  }
+  function addFaq(){
+    if(!newFaq.q.trim()||!newFaq.a.trim())return;
+    const n={...newFaq,id:Date.now()};
+    setFaqs(prev=>{const arr=[...prev,n];lsSet("daon-faqs",arr);return arr;});
+    setNewFaq({cat:"기타",q:"",a:""});setShowAdd(false);
+  }
+
+  const tabStyle=(t)=>({padding:"8px 16px",border:"none",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,background:tab===t?"#1d4ed8":"transparent",color:tab===t?"white":"#6b7280",transition:"all .15s"});
+
   return (
-    <div style={{flex:1,overflowY:"auto",padding:"1.5rem",background:"#f0f5ff"}}>
-      <h2 style={{fontSize:20,fontWeight:800,color:"#1e3a8a",marginBottom:"1.25rem",letterSpacing:"-0.02em"}}>📊 문의 분석 대시보드</h2>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:"1.25rem"}}>
-        {[{l:"총 문의 건수",v:qs.length,c:"#2563eb"},{l:"카테고리 수",v:Object.keys(cats).length,c:"#7c3aed"},{l:"문의 사용자",v:Object.keys(users).length,c:"#059669"}].map(k=>(
-          <div key={k.l} style={{background:"white",borderRadius:14,padding:"1rem 1.25rem",border:"1px solid #e5e7eb",boxShadow:"0 2px 8px rgba(30,58,138,.05)"}}>
-            <div style={{fontSize:30,fontWeight:800,color:k.c,letterSpacing:"-0.03em"}}>{k.v}</div>
-            <div style={{fontSize:12,color:"#6b7280",marginTop:3}}>{k.l}</div>
-          </div>
-        ))}
-      </div>
-      <div style={{background:"white",borderRadius:14,padding:"1.25rem",border:"1px solid #e5e7eb",marginBottom:"1.25rem"}}>
-        <h3 style={{fontSize:14,fontWeight:700,color:"#111827",marginBottom:"1rem"}}>카테고리별 문의 빈도</h3>
-        {qs.length===0?(
-          <div style={{textAlign:"center",color:"#9ca3af",padding:"2.5rem",fontSize:13}}><div style={{fontSize:32,marginBottom:8}}>📭</div>아직 문의 데이터가 없습니다.<br/>NOVA 채팅에서 질문하시면 자동으로 기록됩니다.</div>
-        ):sorted.map(([cat,cnt])=>(
-          <div key={cat} style={{marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:5}}>
-              <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:3,background:CAT_COLOR[cat]||"#6b7280"}}/><span style={{fontWeight:600,color:"#374151"}}>{cat}</span></div>
-              <span style={{color:"#6b7280",fontWeight:500}}>{cnt}건 ({Math.round(cnt/qs.length*100)}%)</span>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:200,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"white",borderRadius:20,width:"min(900px,95vw)",height:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",boxShadow:"0 30px 80px rgba(0,0,0,0.3)"}}>
+        {/* 헤더 */}
+        <div style={{padding:"1rem 1.25rem",borderBottom:"1px solid #e5e7eb",display:"flex",alignItems:"center",justifyContent:"space-between",background:"#1e3a8a"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:20}}>⚙️</span>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:"white"}}>DAON 관리자 모드</div>
+              <div style={{fontSize:11,color:"#93c5fd"}}>FAQ 수정 · 문의 분석 · 피드백 확인</div>
             </div>
-            <div style={{height:8,background:"#f3f4f6",borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${cnt/maxC*100}%`,background:CAT_COLOR[cat]||"#2563eb",borderRadius:4,transition:"width .6s ease"}}/></div>
           </div>
-        ))}
-      </div>
-      <div style={{background:"white",borderRadius:14,padding:"1.25rem",border:"1px solid #e5e7eb"}}>
-        <h3 style={{fontSize:14,fontWeight:700,color:"#111827",marginBottom:"1rem"}}>최근 문의 내역</h3>
-        {qs.length===0?<div style={{textAlign:"center",color:"#9ca3af",padding:"2rem",fontSize:12}}>데이터 없음</div>
-        :[...qs].reverse().slice(0,20).map((q,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"8px 0",borderBottom:i<19?"1px solid #f3f4f6":"none"}}>
-            <span style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10,background:CAT_COLOR[q.cat]||"#6b7280",color:"white",flexShrink:0,marginTop:2,whiteSpace:"nowrap"}}>{q.cat}</span>
-            <div style={{flex:1}}><div style={{fontSize:12,color:"#111827",lineHeight:1.4}}>{q.text}</div><div style={{fontSize:10,color:"#9ca3af",marginTop:2}}>{q.user} · {q.dept}</div></div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/* ── FAQ ── */
-function FAQPage() {
-  const [open,setOpen]=useState(null);
-  const groups={};
-  FAQS.forEach(f=>{if(!groups[f.cat])groups[f.cat]=[];groups[f.cat].push(f);});
-  return (
-    <div style={{flex:1,overflowY:"auto",padding:"1.5rem",background:"#f0f5ff"}}>
-      <h2 style={{fontSize:20,fontWeight:800,color:"#1e3a8a",marginBottom:"1.25rem",letterSpacing:"-0.02em"}}>📋 FAQ 라이브러리</h2>
-      {Object.entries(groups).map(([cat,faqs])=>(
-        <div key={cat} style={{marginBottom:"1.25rem"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}><div style={{width:4,height:20,background:CAT_COLOR[cat],borderRadius:2}}/><h3 style={{fontSize:13,fontWeight:700,color:"#374151"}}>{cat}</h3><div style={{fontSize:10,color:"#9ca3af"}}>{faqs.length}개</div></div>
-          {faqs.map((f,i)=>{
-            const key=`${cat}-${i}`;
-            return (
-              <div key={i} onClick={()=>setOpen(open===key?null:key)} style={{background:"white",border:`1.5px solid ${open===key?CAT_COLOR[cat]:"#e5e7eb"}`,borderRadius:12,padding:"12px 16px",marginBottom:6,cursor:"pointer",transition:"all .15s",boxShadow:open===key?`0 4px 14px ${CAT_COLOR[cat]}25`:"0 1px 4px rgba(0,0,0,.04)"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
-                  <div style={{fontSize:13,fontWeight:600,color:"#111827",lineHeight:1.4}}>Q. {f.q}</div>
-                  <div style={{fontSize:12,color:"#9ca3af",flexShrink:0,transform:open===key?"rotate(180deg)":"none",transition:"transform .2s"}}>▾</div>
-                </div>
-                {open===key&&<div style={{marginTop:10,padding:"10px 14px",background:"#eff6ff",borderRadius:8,fontSize:12,color:"#1e40af",lineHeight:1.7,borderLeft:`3px solid ${CAT_COLOR[cat]}`}}>A. {f.a}</div>}
-              </div>
-            );
-          })}
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",color:"white",width:32,height:32,borderRadius:"50%",cursor:"pointer",fontSize:16}}>×</button>
         </div>
-      ))}
+
+        {/* 탭 */}
+        <div style={{padding:"10px 16px",borderBottom:"1px solid #e5e7eb",display:"flex",gap:6}}>
+          {[{id:"faq",label:"📋 FAQ 관리"},{id:"analytics",label:"📊 문의 분석"},{id:"feedback",label:`💬 피드백 (${feedbacks.length})`}].map(t=>(
+            <button key={t.id} onClick={()=>setTab(t.id)} style={tabStyle(t.id)}>{t.label}</button>
+          ))}
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"1.25rem"}}>
+
+          {/* FAQ 관리 탭 */}
+          {tab==="faq"&&(
+            <div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1rem"}}>
+                <div style={{fontSize:14,fontWeight:700,color:"#111827"}}>FAQ 목록 ({faqs.length}개)</div>
+                <button onClick={()=>setShowAdd(true)} style={{padding:"7px 14px",background:"#1d4ed8",color:"white",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                  + FAQ 추가
+                </button>
+              </div>
+
+              {showAdd&&(
+                <div style={{background:"#eff6ff",border:"1.5px solid #2563eb",borderRadius:12,padding:"1rem",marginBottom:"1rem"}}>
+                  <div style={{fontSize:13,fontWeight:700,color:"#1e3a8a",marginBottom:10}}>새 FAQ 추가</div>
+                  <select value={newFaq.cat} onChange={e=>setNewFaq(p=>({...p,cat:e.target.value}))}
+                    style={{width:"100%",padding:"8px",border:"1px solid #bfdbfe",borderRadius:8,fontSize:12,marginBottom:8,outline:"none"}}>
+                    {Object.keys(CATS).concat(["기타"]).map(c=><option key={c}>{c}</option>)}
+                  </select>
+                  <input value={newFaq.q} onChange={e=>setNewFaq(p=>({...p,q:e.target.value}))}
+                    placeholder="질문 내용" style={{width:"100%",padding:"8px",border:"1px solid #bfdbfe",borderRadius:8,fontSize:12,marginBottom:8,outline:"none",boxSizing:"border-box"}}/>
+                  <textarea value={newFaq.a} onChange={e=>setNewFaq(p=>({...p,a:e.target.value}))}
+                    placeholder="답변 내용" rows={3} style={{width:"100%",padding:"8px",border:"1px solid #bfdbfe",borderRadius:8,fontSize:12,marginBottom:8,outline:"none",resize:"none",boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:"8px",background:"#f3f4f6",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>취소</button>
+                    <button onClick={addFaq} style={{flex:2,padding:"8px",background:"#1d4ed8",color:"white",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>저장</button>
+                  </div>
+                </div>
+              )}
+
+              {faqs.map(f=>(
+                <div key={f.id} style={{border:"1px solid #e5e7eb",borderRadius:12,marginBottom:8,overflow:"hidden"}}>
+                  {editId===f.id?(
+                    <div style={{padding:"12px 14px",background:"#fffbeb"}}>
+                      <select value={editData.cat||f.cat} onChange={e=>setEditData(p=>({...p,cat:e.target.value}))}
+                        style={{width:"100%",padding:"7px",border:"1px solid #fcd34d",borderRadius:8,fontSize:12,marginBottom:8,outline:"none"}}>
+                        {Object.keys(CATS).concat(["기타"]).map(c=><option key={c}>{c}</option>)}
+                      </select>
+                      <input value={editData.q??f.q} onChange={e=>setEditData(p=>({...p,q:e.target.value}))}
+                        style={{width:"100%",padding:"8px",border:"1px solid #fcd34d",borderRadius:8,fontSize:12,marginBottom:8,outline:"none",boxSizing:"border-box",fontWeight:600}}/>
+                      <textarea value={editData.a??f.a} onChange={e=>setEditData(p=>({...p,a:e.target.value}))}
+                        rows={3} style={{width:"100%",padding:"8px",border:"1px solid #fcd34d",borderRadius:8,fontSize:12,marginBottom:8,outline:"none",resize:"none",boxSizing:"border-box"}}/>
+                      <div style={{display:"flex",gap:8}}>
+                        <button onClick={()=>setEditId(null)} style={{flex:1,padding:"7px",background:"#f3f4f6",border:"none",borderRadius:8,fontSize:12,cursor:"pointer"}}>취소</button>
+                        <button onClick={()=>saveEdit(f.id)} style={{flex:2,padding:"7px",background:"#1d4ed8",color:"white",border:"none",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer"}}>저장</button>
+                      </div>
+                    </div>
+                  ):(
+                    <div style={{padding:"12px 14px",display:"flex",gap:10,alignItems:"flex-start"}}>
+                      <span style={{fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:10,background:CAT_COLOR[f.cat]||"#6b7280",color:"white",flexShrink:0,marginTop:2,whiteSpace:"nowrap"}}>{f.cat}</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:12,fontWeight:700,color:"#111827",marginBottom:3}}>Q. {f.q}</div>
+                        <div style={{fontSize:11,color:"#6b7280",lineHeight:1.5}}>A. {f.a}</div>
+                      </div>
+                      <div style={{display:"flex",gap:4,flexShrink:0}}>
+                        <button onClick={()=>{setEditId(f.id);setEditData({});}} style={{padding:"4px 10px",background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:6,fontSize:11,color:"#1d4ed8",cursor:"pointer"}}>수정</button>
+                        <button onClick={()=>deleteFaq(f.id)} style={{padding:"4px 10px",background:"#fef2f2",border:"1px solid #fecaca",borderRadius:6,fontSize:11,color:"#dc2626",cursor:"pointer"}}>삭제</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* 분석 탭 */}
+          {tab==="analytics"&&(
+            <div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:12,marginBottom:"1.25rem"}}>
+                {[{l:"총 문의 건수",v:qs.length,c:"#2563eb"},{l:"카테고리 수",v:Object.keys(cats).length,c:"#7c3aed"},{l:"문의자 수",v:Object.keys(users).length,c:"#059669"}].map(k=>(
+                  <div key={k.l} style={{background:"#f8faff",borderRadius:12,padding:"1rem",border:"1px solid #e5e7eb",textAlign:"center"}}>
+                    <div style={{fontSize:28,fontWeight:800,color:k.c}}>{k.v}</div>
+                    <div style={{fontSize:11,color:"#6b7280",marginTop:3}}>{k.l}</div>
+                  </div>
+                ))}
+              </div>
+              <div style={{marginBottom:"1.25rem"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#111827",marginBottom:10}}>카테고리별 문의 빈도</div>
+                {qs.length===0?<div style={{textAlign:"center",color:"#9ca3af",padding:"2rem",fontSize:12}}>아직 문의 데이터가 없습니다.</div>
+                :sorted.map(([cat,cnt])=>(
+                  <div key={cat} style={{marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:8,height:8,borderRadius:2,background:CAT_COLOR[cat]||"#6b7280"}}/><span style={{fontWeight:600}}>{cat}</span></div>
+                      <span style={{color:"#6b7280"}}>{cnt}건</span>
+                    </div>
+                    <div style={{height:7,background:"#f3f4f6",borderRadius:4,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${cnt/maxC*100}%`,background:CAT_COLOR[cat]||"#2563eb",borderRadius:4}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:"#111827",marginBottom:10}}>최근 문의 내역</div>
+                {[...qs].reverse().slice(0,20).map((q,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,padding:"7px 0",borderBottom:"1px solid #f3f4f6",alignItems:"flex-start"}}>
+                    <span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:8,background:CAT_COLOR[q.cat]||"#6b7280",color:"white",flexShrink:0,marginTop:2}}>{q.cat}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:11,color:"#111827"}}>{q.text}</div>
+                      <div style={{fontSize:10,color:"#9ca3af",marginTop:1}}>{q.user} {q.dept&&`· ${q.dept}`}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 피드백 탭 */}
+          {tab==="feedback"&&(
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:"#111827",marginBottom:10}}>수집된 피드백 ({feedbacks.length}건)</div>
+              {feedbacks.length===0?(
+                <div style={{textAlign:"center",color:"#9ca3af",padding:"3rem",fontSize:12}}>아직 피드백이 없습니다.</div>
+              ):[...feedbacks].reverse().map((f,i)=>(
+                <div key={i} style={{background:"#f8faff",border:"1px solid #e5e7eb",borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+                  <div style={{fontSize:12,color:"#111827",lineHeight:1.6,marginBottom:6}}>{f.text}</div>
+                  <div style={{fontSize:10,color:"#9ca3af"}}>{f.user} {f.dept&&`· ${f.dept}`} · {new Date(f.ts).toLocaleDateString("ko-KR")}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
 
-/* ── 지침 ── */
-function GuidelinesPage() {
-  const docs=[
-    {title:"법인차량 운행 지침",cat:"법인차량",desc:"차량별 사용 규정, 운행일지 양식, 주유·세차 기준"},
-    {title:"전자결재 기안 가이드",cat:"기안·결재",desc:"기안서 종류별 결재라인 및 첨부서류 기준"},
-    {title:"신규입사자 온보딩 핸드북",cat:"채용·면접",desc:"입사 첫날 준비사항, 자리배치, 웰컴런치 가이드"},
-    {title:"비품 구매 프로세스",cat:"비품·구매",desc:"품의서 작성 기준, 오피스디포 거래명세서 활용법"},
-    {title:"출장·법인카드 이용 지침",cat:"출장·법인카드",desc:"항공권 예약 절차, 법인카드 한도 기준, 정산 방법"},
-    {title:"두바이 지사 행정 매뉴얼",cat:"기타",desc:"해외 지사 행정 처리, 재무제표 관련 안내"},
-  ];
+/* ── 관리자 로그인 ── */
+function AdminLogin({onSuccess,onCancel}){
+  const [pw,setPw]=useState("");const [err,setErr]=useState("");
   return (
-    <div style={{flex:1,overflowY:"auto",padding:"1.5rem",background:"#f0f5ff"}}>
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"1.25rem",flexWrap:"wrap",gap:8}}>
-        <h2 style={{fontSize:20,fontWeight:800,color:"#1e3a8a",letterSpacing:"-0.02em"}}>📁 지침·규정 자료실</h2>
-        <div style={{fontSize:11,padding:"4px 12px",background:"#fef3c7",border:"1px solid #fcd34d",borderRadius:20,color:"#92400e",fontWeight:600}}>🚧 문서 연결 준비 중</div>
-      </div>
-      <div style={{background:"#eff6ff",border:"1px solid #bfdbfe",borderRadius:14,padding:"1rem 1.25rem",marginBottom:"1.25rem",display:"flex",alignItems:"flex-start",gap:14}}>
-        <div style={{fontSize:28,flexShrink:0}}>📌</div>
-        <div><div style={{fontSize:13,fontWeight:700,color:"#1e40af",marginBottom:4}}>NOVA와 문서를 연결하면 더 정확한 답변이 가능합니다</div><div style={{fontSize:12,color:"#3b82f6",lineHeight:1.6}}>아래 지침 문서들을 이 자료실에 업로드하면 NOVA가 문서 내용 기반으로 더 정확한 답변을 제공합니다.</div></div>
-      </div>
-      <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:"1.25rem"}}>
-        {docs.map((d,i)=>(
-          <div key={i} style={{background:"white",border:"1px solid #e5e7eb",borderRadius:12,padding:"1rem 1.25rem",display:"flex",alignItems:"center",gap:12,boxShadow:"0 1px 4px rgba(30,58,138,.05)"}}>
-            <div style={{width:44,height:44,borderRadius:10,background:CAT_COLOR[d.cat]||"#2563eb",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,flexShrink:0}}>📄</div>
-            <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:"#111827"}}>{d.title}</div><div style={{fontSize:11,color:"#6b7280",marginTop:3}}>{d.desc}</div></div>
-            <button style={{fontSize:11,padding:"5px 12px",background:"#f3f4f6",border:"none",borderRadius:8,color:"#6b7280",cursor:"pointer",fontWeight:500}}>연결 예정</button>
-          </div>
-        ))}
-      </div>
-      <div style={{background:"white",border:"2px dashed #bfdbfe",borderRadius:14,padding:"2.5rem",textAlign:"center"}}>
-        <div style={{fontSize:36,marginBottom:10}}>📎</div>
-        <div style={{fontSize:14,fontWeight:700,color:"#1d4ed8",marginBottom:6}}>문서 업로드 및 연결 기능 추가 예정</div>
-        <div style={{fontSize:12,color:"#6b7280",lineHeight:1.7}}>P&C팀 내부 지침 문서를 이 자료실에 연결하면<br/>NOVA가 문서 기반으로 더 정확한 맞춤 답변을 제공합니다.</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:150,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:"white",borderRadius:20,padding:"1.75rem",width:320,boxShadow:"0 20px 60px rgba(0,0,0,0.25)"}}>
+        <div style={{fontSize:16,fontWeight:700,color:"#1e3a8a",marginBottom:16,textAlign:"center"}}>⚙️ 관리자 로그인</div>
+        <input type="password" value={pw} onChange={e=>{setPw(e.target.value);setErr("");}}
+          onKeyDown={e=>{if(e.key==="Enter"){if(pw===ADMIN_PW)onSuccess();else setErr("비밀번호가 올바르지 않습니다.");}}}
+          placeholder="관리자 비밀번호" autoFocus
+          style={{width:"100%",padding:"11px 14px",border:"1.5px solid #e5e7eb",borderRadius:10,fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:8}}/>
+        {err&&<div style={{fontSize:12,color:"#dc2626",marginBottom:8,textAlign:"center"}}>{err}</div>}
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={onCancel} style={{flex:1,padding:"10px",background:"#f3f4f6",border:"none",borderRadius:10,fontSize:13,cursor:"pointer"}}>취소</button>
+          <button onClick={()=>{if(pw===ADMIN_PW)onSuccess();else setErr("비밀번호가 올바르지 않습니다.");}} style={{flex:2,padding:"10px",background:"#1d4ed8",color:"white",border:"none",borderRadius:10,fontSize:13,fontWeight:700,cursor:"pointer"}}>확인</button>
+        </div>
       </div>
     </div>
   );
 }
 
 /* ── 메인 앱 ── */
-function App() {
-  const [page,setPage]=useState("login");
-  const [user,setUser]=useState(null);
-  const [qs,setQs]=useState(()=>lsGet("nova-qs")||[]);
+function App(){
+  const [page,setPage]=useState("name"); // name | chat
+  const [userName,setUserName]=useState("");
+  const [userDept,setUserDept]=useState("");
+  const [qs,setQs]=useState(()=>lsGet("daon-qs")||[]);
+  const [faqs,setFaqs]=useState(()=>lsGet("daon-faqs")||DEFAULT_FAQS);
+  const [showAdmin,setShowAdmin]=useState(false);
+  const [showAdminLogin,setShowAdminLogin]=useState(false);
 
-  function addQ(q) { setQs(prev=>{const n=[...prev,q];lsSet("nova-qs",n);return n;}); }
+  function addQ(q){setQs(prev=>{const n=[...prev,q];lsSet("daon-qs",n);return n;});}
 
-  if(page==="login") return <LoginPage onLogin={u=>{setUser(u);setPage("chat");}}/>;
+  function handleStart(name,dept){
+    if(name==="__ADMIN__"){setShowAdminLogin(true);return;}
+    setUserName(name);setUserDept(dept);setPage("chat");
+  }
+
   return (
-    <div style={{display:"flex",height:"100vh",overflow:"hidden"}}>
-      <Sidebar page={page} setPage={setPage} user={user} onLogout={()=>{setUser(null);setPage("login");}}/>
-      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {page==="chat"&&<ChatPage user={user} onLog={addQ}/>}
-        {page==="analytics"&&<AnalyticsPage qs={qs}/>}
-        {page==="faq"&&<FAQPage/>}
-        {page==="guidelines"&&<GuidelinesPage/>}
-      </div>
+    <div>
+      {page==="name"&&<NameInputPage onStart={handleStart}/>}
+      {page==="chat"&&(
+        <ChatPage
+          userName={userName} userDept={userDept}
+          onLog={addQ} faqs={faqs}
+          onAdminOpen={()=>setShowAdminLogin(true)}
+        />
+      )}
+      {showAdminLogin&&(
+        <AdminLogin
+          onSuccess={()=>{setShowAdminLogin(false);setShowAdmin(true);}}
+          onCancel={()=>setShowAdminLogin(false)}
+        />
+      )}
+      {showAdmin&&(
+        <AdminPage
+          onClose={()=>setShowAdmin(false)}
+          faqs={faqs} setFaqs={setFaqs} qs={qs}
+        />
+      )}
     </div>
   );
 }
 
-const root=ReactDOM.createRoot(document.getElementById("root"));
-root.render(<App/>);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
 </script>
 </body>
 </html>
